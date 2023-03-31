@@ -22,40 +22,9 @@ from scipy.special import erfc, erfcinv
 import scipy.stats as stats
 from tqdm import tqdm
 
-import constants, datalogging
+import constants
 from core.utility import * 
 from core.overlaps import Overlaps
-
-from sacred.observers import FileStorageObserver
-from sacred import Experiment
-
-ex = Experiment('joint_density_experiment')
-
-def load_data(load : str) -> Tuple[float, float, float, Overlaps]: 
-    """
-    Load the overlaps from the specified folder
-    """
-    configuration, results = datalogging.load_config_and_result(load)
-        
-    alpha = configuration['alpha']
-    lamb  = configuration['lambda']
-    sigma   = configuration['sigma']
-
-    content = results['overlaps']
-
-    overlaps = Overlaps(
-        rho  = content['rho'],
-        V    = content['V'],
-        Q    = content['Q'],
-        m    = content['m'],
-        mbo  =  content['mbo'],
-        qbo  =  content['qbo'],
-        qerm = content['qerm']
-    )
-
-    return alpha, lamb, sigma, overlaps
-
-# ======= 
 
 def integrand_p_correct(nu, cov, qbo, a, b, sigma = 0.0):
     y = np.sign(nu)
@@ -206,72 +175,3 @@ def get_p_one_bo_teacher_density(sigma, Sigma_bo_teacher, N, vmin=0., vmax=1., b
     if bo_on_rows == False:
         return matrix.T
     return matrix
-
-@ex.config
-def config():
-    # dimension not used for the theoretical prediciton but for experiments
-    d                = 1000
-
-    # can be be 'p_correct' (for the proba to be correct), 'p_one' (proba to be equal to 1) or 'variance' 
-    quantity         = 'p_correct'
-    method           = 'mc'
-
-    load_file        = ''
-    # by default, we give the same file 
-    save_folder      = constants.DEFAULT_JOINT_DENSITY_FOLDER
-    save_file        = constants.DEFAULT_JOINT_DENSITY_FILE_NAME
-    verbose          = False
-
-    # define boundaries for computation. Useful when dist. is peaked
-    # near (1, 1)
-    vmin             = 0.
-    vmax             = 1.
-    N                = 20
-
-    dic              = dict(locals())
-
-@ex.automain
-def main(dic):
-    N    = dic['N']
-    vmin = dic['vmin']
-    vmax = dic['vmax']
-    quantity = dic['quantity']
-
-    da = db = 1. / N
-    subdivisions = np.linspace(vmin + da / 2., vmax - db / 2., N)
-    
-    alpha, lamb, sigma, overlaps = load_data(dic['load_file'])
-
-    Sigma = overlaps.get_teacher_bo_erm_covariance(sigma, add_noise=False)
-    det = np.linalg.det(Sigma)
-    if det <= 0:
-        print('det of Sigma : ', det)
-        raise Exception('Matrix must be positive definite')
-
-    if quantity == 'p_correct':
-        matrix = get_p_correct_density(Sigma, overlaps.qbo, N, vmin, vmax)
-
-    if dic['verbose'] == True:
-        print('Sum of elements : ', np.sum(matrix))
-
-    config = {
-        'alpha' : alpha,
-        'lamb'  : lamb,
-        'sigma'  : sigma,
-        'N'    : N,
-        'vmin' : vmin,
-        'vmax' : vmax,
-        'quantity' : quantity,
-    }
-
-    result = {
-        'density' : matrix.tolist()
-    }
-
-    save_folder = dic['save_folder']
-    if save_folder[-1] != '/':
-        save_folder += '/'
-    save_file = dic['save_file']
-
-    save_file = save_folder + datalogging.get_time_default_name(save_file)
-    datalogging.save_config_and_result(config, result, save_file)
