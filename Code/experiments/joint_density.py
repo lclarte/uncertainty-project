@@ -22,9 +22,7 @@ from scipy.special import erfc, erfcinv
 import scipy.stats as stats
 from tqdm import tqdm
 
-import constants
 from core.utility import * 
-from core.overlaps import Overlaps
 
 def integrand_p_correct(nu, cov, qbo, a, b, sigma = 0.0):
     y = np.sign(nu)
